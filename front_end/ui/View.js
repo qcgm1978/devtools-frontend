@@ -268,6 +268,9 @@ UI.TabbedViewLocation.prototype = {
    */
   tabbedPane() {},
 
+  /**
+   * @return {!UI.ToolbarMenuButton}
+   */
   enableMoreTabsButton() {}
 };
 
@@ -506,7 +509,7 @@ UI.ViewManager._ExpandableContainerWidget = class extends UI.VBox {
     this._titleElement.addEventListener('keydown', this._onTitleKeyDown.bind(this), false);
     this.contentElement.insertBefore(this._titleElement, this.contentElement.firstChild);
 
-    this.contentElement.createChild('content');
+    this.contentElement.createChild('slot');
     this._view = view;
     view[UI.ViewManager._ExpandableContainerWidget._symbol] = this;
   }
@@ -632,8 +635,7 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
     this._tabbedPane.addEventListener(UI.TabbedPane.Events.TabClosed, this._tabClosed, this);
     this._closeableTabSetting = Common.settings.createSetting(location + '-closeableTabs', {});
     this._tabOrderSetting = Common.settings.createSetting(location + '-tabOrder', {});
-    this._tabbedPane.addEventListener(
-        UI.TabbedPane.Events.TabOrderChanged, event => this._persistTabOrder(event.data['tabId']));
+    this._tabbedPane.addEventListener(UI.TabbedPane.Events.TabOrderChanged, this._persistTabOrder, this);
     if (restoreSelection)
       this._lastSelectedTabSetting = Common.settings.createSetting(location + '-selectedTab', '');
     this._defaultTab = defaultTab;
@@ -663,10 +665,13 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
 
   /**
    * @override
+   * @return {!UI.ToolbarMenuButton}
    */
   enableMoreTabsButton() {
-    this._tabbedPane.leftToolbar().appendToolbarItem(new UI.ToolbarMenuButton(this._appendTabsToMenu.bind(this)));
+    const moreTabsButton = new UI.ToolbarMenuButton(this._appendTabsToMenu.bind(this));
+    this._tabbedPane.leftToolbar().appendToolbarItem(moreTabsButton);
     this._tabbedPane.disableOverflowMenu();
+    return moreTabsButton;
   }
 
   /**
@@ -766,7 +771,7 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
         this._closeableTabSetting.set(tabs);
       }
     }
-    this._persistTabOrder(view.viewId());
+    this._persistTabOrder();
   }
 
   /**
@@ -822,20 +827,23 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
     this._views.get(id).disposeView();
   }
 
-  /**
-   * @param {string} tabId
-   */
-  _persistTabOrder(tabId) {
+  _persistTabOrder() {
     const tabIds = this._tabbedPane.tabIds();
-    const previousId = tabIds[tabIds.indexOf(tabId) - 1];
-    const orders = this._tabOrderSetting.get();
-    orders[tabId] = previousId && orders[previousId] ? orders[previousId] + 1 : 0;
-    const keys = Object.keys(orders);
-    keys.sort((a, b) => orders[a] - orders[b]);
-
     const tabOrders = {};
-    for (let i = 0; i < keys.length; i++)
-      tabOrders[keys[i]] = (i + 1) * UI.ViewManager._TabbedLocation.orderStep;
+    for (let i = 0; i < tabIds.length; i++)
+      tabOrders[tabIds[i]] = (i + 1) * UI.ViewManager._TabbedLocation.orderStep;
+
+    const oldTabOrder = this._tabOrderSetting.get();
+    const oldTabArray = Object.keys(oldTabOrder);
+    oldTabArray.sort((a, b) => oldTabOrder[a] - oldTabOrder[b]);
+    let lastOrder = 0;
+    for (const key of oldTabArray) {
+      if (key in tabOrders) {
+        lastOrder = tabOrders[key];
+        continue;
+      }
+      tabOrders[key] = ++lastOrder;
+    }
     this._tabOrderSetting.set(tabOrders);
   }
 };

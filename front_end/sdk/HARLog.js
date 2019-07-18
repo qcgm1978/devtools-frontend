@@ -174,14 +174,24 @@ SDK.HARLog.Entry = class {
     };
 
     // Chrome specific.
+
     if (harEntry._request.cached())
       entry._fromCache = harEntry._request.cachedInMemory() ? 'memory' : 'disk';
 
     if (harEntry._request.connectionId !== '0')
       entry.connection = harEntry._request.connectionId;
+
     const page = SDK.NetworkLog.PageLoad.forRequest(harEntry._request);
     if (page)
       entry.pageref = 'page_' + page.id;
+
+    if (harEntry._request.resourceType() === Common.resourceTypes.WebSocket) {
+      const messages = [];
+      for (const message of harEntry._request.frames())
+        messages.push({type: message.type, time: message.time, opcode: message.opCode, data: message.text});
+      entry._webSocketMessages = messages;
+    }
+
     return entry;
   }
 
@@ -198,7 +208,7 @@ SDK.HARLog.Entry = class {
       queryString: this._buildParameters(this._request.queryParameters || []),
       cookies: this._buildCookies(this._request.requestCookies || []),
       headersSize: headersText ? headersText.length : -1,
-      bodySize: this.requestBodySize
+      bodySize: await this._requestBodySize()
     };
     const postData = await this._buildPostData();
     if (postData)
@@ -325,7 +335,7 @@ SDK.HARLog.Entry = class {
     const postData = await this._request.requestFormData();
     if (!postData)
       return null;
-    const res = {mimeType: this._request.requestContentType(), text: postData};
+    const res = {mimeType: this._request.requestContentType() || '', text: postData};
     const formParameters = await this._request.formParameters();
     if (formParameters)
       res.params = this._buildParameters(formParameters);
@@ -376,10 +386,18 @@ SDK.HARLog.Entry = class {
   }
 
   /**
-   * @return {number}
+   * @return {!Promise<number>}
    */
-  get requestBodySize() {
-    return !this._request.requestFormData ? 0 : this._request.requestFormData.length;
+  async _requestBodySize() {
+    const postData = await this._request.requestFormData();
+    if (!postData)
+      return 0;
+
+    // As per the har spec, returns the length in bytes of the posted data.
+    // TODO(jarhar): This will be wrong if the underlying encoding is not UTF-8. NetworkRequest.requestFormData is
+    //   assumed to be UTF-8 because the backend decodes post data to a UTF-8 string regardless of the provided
+    //   content-type/charset in InspectorNetworkAgent::FormDataToString
+    return new TextEncoder('utf-8').encode(postData).length;
   }
 
   /**

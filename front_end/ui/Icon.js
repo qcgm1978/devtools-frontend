@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @constructor
- * @extends {HTMLSpanElement}
- */
 UI.Icon = class extends HTMLSpanElement {
   constructor() {
     super();
-    throw new Error('icon must be created via factory method.');
+    /** @type {?UI.Icon.Descriptor} */
+    this._descriptor = null;
+    /** @type {?UI.Icon.SpriteSheet} */
+    this._spriteSheet = null;
+    /** @type {string} */
+    this._iconType = '';
   }
 
   /**
@@ -19,26 +20,14 @@ UI.Icon = class extends HTMLSpanElement {
    */
   static create(iconType, className) {
     if (!UI.Icon._constructor)
-      UI.Icon._constructor = UI.registerCustomElement('span', 'ui-icon', UI.Icon.prototype);
+      UI.Icon._constructor = UI.registerCustomElement('span', 'ui-icon', UI.Icon);
 
-    const icon = /** @type {!UI.Icon} */ (new UI.Icon._constructor());
+    const icon = /** @type {!UI.Icon} */ (UI.Icon._constructor());
     if (className)
       icon.className = className;
     if (iconType)
       icon.setIconType(iconType);
     return icon;
-  }
-
-  /**
-   * @override
-   */
-  createdCallback() {
-    /** @type {?UI.Icon.Descriptor} */
-    this._descriptor = null;
-    /** @type {?UI.Icon.SpriteSheet} */
-    this._spriteSheet = null;
-    /** @type {string} */
-    this._iconType = '';
   }
 
   /**
@@ -176,6 +165,11 @@ UI.Icon.Descriptors = {
   'mediumicon-bug': {position: 'd1', spritesheet: 'mediumicons', isMask: true},
   'mediumicon-list': {position: 'e5', spritesheet: 'mediumicons', isMask: true},
   'mediumicon-warning': {position: 'd5', spritesheet: 'mediumicons', isMask: true},
+  'mediumicon-sync': {position: 'a5', spritesheet: 'mediumicons', isMask: true},
+  'mediumicon-fetch': {position: 'b5', spritesheet: 'mediumicons', isMask: true},
+  'mediumicon-cloud': {position: 'a6', spritesheet: 'mediumicons', isMask: true},
+  'mediumicon-bell': {position: 'b6', spritesheet: 'mediumicons', isMask: true},
+  'mediumicon-payment': {position: 'c6', spritesheet: 'mediumicons', isMask: true},
 
   'badge-navigator-file-sync': {position: 'a9', spritesheet: 'largeicons'},
   'largeicon-activate-breakpoints': {position: 'b9', spritesheet: 'largeicons', isMask: true},

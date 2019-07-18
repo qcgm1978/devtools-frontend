@@ -563,7 +563,6 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
       return;
 
     element.select();
-    event.consume(true);
   }
 
   /**
@@ -600,14 +599,12 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
    */
   _highlightTreeElement(element, showInfo) {
     if (element instanceof Elements.ElementsTreeElement) {
-      element.node().domModel().overlayModel().highlightDOMNodeWithConfig(element.node().id, {mode: 'all', showInfo});
+      element.node().domModel().overlayModel().highlightInOverlay({node: element.node()}, 'all', showInfo);
       return;
     }
 
-    if (element instanceof Elements.ElementsTreeOutline.ShortcutTreeElement) {
-      element.domModel().overlayModel().highlightDOMNodeWithConfig(
-          undefined, {mode: 'all', showInfo}, element.backendNodeId());
-    }
+    if (element instanceof Elements.ElementsTreeOutline.ShortcutTreeElement)
+      element.domModel().overlayModel().highlightInOverlay({deferredNode: element.deferredNode()}, 'all', showInfo);
   }
 
   _onmouseleave(event) {
@@ -1159,13 +1156,18 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
 
   /**
    * @param {!Elements.ElementsTreeElement} treeElement
+   * @returns {!Promise}
    */
   populateTreeElement(treeElement) {
     if (treeElement.childCount() || !treeElement.isExpandable())
-      return;
-    treeElement.node().getChildNodes(() => {
-      treeElement.populated = true;
-      this._updateModifiedParentNode(treeElement.node());
+      return Promise.resolve();
+
+    return new Promise(resolve => {
+      treeElement.node().getChildNodes(() => {
+        treeElement.populated = true;
+        this._updateModifiedParentNode(treeElement.node());
+        resolve();
+      });
     });
   }
 
@@ -1245,7 +1247,9 @@ Elements.ElementsTreeOutline = class extends UI.TreeOutline {
    * @return {boolean}
    */
   _hasVisibleChildren(node) {
-    if (node.isIframe() && Runtime.experiments.isEnabled('oopifInlineDOM'))
+    if (node.isIframe())
+      return true;
+    if (node.isPortal())
       return true;
     if (node.contentDocument())
       return true;
@@ -1643,10 +1647,10 @@ Elements.ElementsTreeOutline.ShortcutTreeElement = class extends UI.TreeElement 
   }
 
   /**
-   * @return {number}
+   * @return {!SDK.DeferredDOMNode}
    */
-  backendNodeId() {
-    return this._nodeShortcut.deferredNode.backendNodeId();
+  deferredNode() {
+    return this._nodeShortcut.deferredNode;
   }
 
   /**

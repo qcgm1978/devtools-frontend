@@ -662,10 +662,10 @@ UI.anotherProfilerActiveLabel = function() {
 UI.asyncStackTraceLabel = function(description) {
   if (description) {
     if (description === 'Promise.resolve')
-      description = Common.UIString('Promise resolved');
+      return ls`Promise resolved (async)`;
     else if (description === 'Promise.reject')
-      description = Common.UIString('Promise rejected');
-    return description + ' ' + Common.UIString('(async)');
+      return ls`Promise rejected (async)`;
+    return ls`${description} (async)`;
   }
   return Common.UIString('Async Call');
 };
@@ -674,9 +674,7 @@ UI.asyncStackTraceLabel = function(description) {
  * @param {!Element} element
  */
 UI.installComponentRootStyles = function(element) {
-  UI.appendStyle(element, 'ui/inspectorCommon.css');
-  UI.themeSupport.injectHighlightStyleSheets(element);
-  UI.themeSupport.injectCustomStyleSheets(element);
+  UI._injectCoreStyles(element);
   element.classList.add('platform-' + Host.platform());
 
   // Detect overlay scrollbar enable by checking for nonzero scrollbar width.
@@ -704,17 +702,26 @@ UI.measuredScrollbarWidth = function(document) {
 /**
  * @param {!Element} element
  * @param {string=} cssFile
+ * @param {boolean=} delegatesFocus
  * @return {!DocumentFragment}
  */
-UI.createShadowRootWithCoreStyles = function(element, cssFile) {
-  const shadowRoot = element.createShadowRoot();
-  UI.appendStyle(shadowRoot, 'ui/inspectorCommon.css');
-  UI.themeSupport.injectHighlightStyleSheets(shadowRoot);
-  UI.themeSupport.injectCustomStyleSheets(shadowRoot);
+UI.createShadowRootWithCoreStyles = function(element, cssFile, delegatesFocus) {
+  const shadowRoot = element.attachShadow({mode: 'open', delegatesFocus});
+  UI._injectCoreStyles(shadowRoot);
   if (cssFile)
     UI.appendStyle(shadowRoot, cssFile);
   shadowRoot.addEventListener('focus', UI._focusChanged.bind(UI), true);
   return shadowRoot;
+};
+
+/**
+ * @param {!Element|!ShadowRoot} root
+ */
+UI._injectCoreStyles = function(root) {
+  UI.appendStyle(root, 'ui/inspectorCommon.css');
+  UI.appendStyle(root, 'ui/textButton.css');
+  UI.themeSupport.injectHighlightStyleSheets(root);
+  UI.themeSupport.injectCustomStyleSheets(root);
 };
 
 /**
@@ -1166,13 +1173,19 @@ UI.beautifyFunctionName = function(name) {
 /**
  * @param {string} localName
  * @param {string} typeExtension
- * @param {!Object} prototype
+ * @param {function(new:HTMLElement, *)} definition
  * @return {function()}
  * @suppressGlobalPropertiesCheck
- * @template T
  */
-UI.registerCustomElement = function(localName, typeExtension, prototype) {
-  return document.registerElement(typeExtension, {prototype: Object.create(prototype), extends: localName});
+UI.registerCustomElement = function(localName, typeExtension, definition) {
+  self.customElements.define(typeExtension, class extends definition {
+    constructor() {
+      super();
+      // TODO(einbinder) convert to classes and custom element tags
+      this.setAttribute('is', typeExtension);
+    }
+  }, {extends: localName});
+  return () => createElement(localName, typeExtension);
 };
 
 /**
@@ -1183,12 +1196,14 @@ UI.registerCustomElement = function(localName, typeExtension, prototype) {
  * @return {!Element}
  */
 UI.createTextButton = function(text, clickHandler, className, primary) {
-  const element = createElementWithClass('button', className || '', 'text-button');
+  const element = createElementWithClass('button', className || '');
   element.textContent = text;
+  element.classList.add('text-button');
   if (primary)
     element.classList.add('primary-button');
   if (clickHandler)
     element.addEventListener('click', clickHandler, false);
+  element.type = 'button';
   return element;
 };
 
@@ -1207,16 +1222,31 @@ UI.createInput = function(className, type) {
 };
 
 /**
+ * @param {string} title
+ * @param {string=} className
+ * @param {!Element=} associatedControl
+ * @return {!Element}
+ */
+UI.createLabel = function(title, className, associatedControl) {
+  const element = createElementWithClass('label', className || '');
+  element.textContent = title;
+  if (associatedControl)
+    UI.ARIAUtils.bindLabelToControl(element, associatedControl);
+
+  return element;
+};
+
+/**
  * @param {string} name
  * @param {string} title
  * @param {boolean=} checked
  * @return {!Element}
  */
 UI.createRadioLabel = function(name, title, checked) {
-  const element = createElement('label', 'dt-radio');
+  const element = createElement('span', 'dt-radio');
   element.radioElement.name = name;
   element.radioElement.checked = !!checked;
-  element.createTextChild(title);
+  element.labelElement.createTextChild(title);
   return element;
 };
 
@@ -1225,8 +1255,8 @@ UI.createRadioLabel = function(name, title, checked) {
  * @param {string} iconClass
  * @return {!Element}
  */
-UI.createLabel = function(title, iconClass) {
-  const element = createElement('label', 'dt-icon-label');
+UI.createIconLabel = function(title, iconClass) {
+  const element = createElement('span', 'dt-icon-label');
   element.createChild('span').textContent = title;
   element.type = iconClass;
   return element;
@@ -1238,8 +1268,8 @@ UI.createLabel = function(title, iconClass) {
  * @param {number} max
  * @param {number} tabIndex
  */
-UI.createSliderLabel = function(min, max, tabIndex) {
-  const element = createElement('label', 'dt-slider');
+UI.createSlider = function(min, max, tabIndex) {
+  const element = createElement('span', 'dt-slider');
   element.sliderElement.min = min;
   element.sliderElement.max = max;
   element.sliderElement.step = 1;
@@ -1270,10 +1300,7 @@ UI.appendStyle = function(node, cssFile) {
   }
 };
 
-/**
- * @extends {HTMLLabelElement}
- */
-UI.CheckboxLabel = class extends HTMLLabelElement {
+UI.CheckboxLabel = class extends HTMLSpanElement {
   constructor() {
     super();
     /** @type {!DocumentFragment} */
@@ -1282,13 +1309,6 @@ UI.CheckboxLabel = class extends HTMLLabelElement {
     this.checkboxElement;
     /** @type {!Element} */
     this.textElement;
-    throw new Error('Checkbox must be created via factory method.');
-  }
-
-  /**
-   * @override
-   */
-  createdCallback() {
     UI.CheckboxLabel._lastId = (UI.CheckboxLabel._lastId || 0) + 1;
     const id = 'ui-checkbox-label' + UI.CheckboxLabel._lastId;
     this._shadowRoot = UI.createShadowRootWithCoreStyles(this, 'ui/checkboxTextLabel.css');
@@ -1297,7 +1317,7 @@ UI.CheckboxLabel = class extends HTMLLabelElement {
     this.checkboxElement.setAttribute('id', id);
     this.textElement = this._shadowRoot.createChild('label', 'dt-checkbox-text');
     this.textElement.setAttribute('for', id);
-    this._shadowRoot.createChild('content');
+    this._shadowRoot.createChild('slot');
   }
 
   /**
@@ -1308,8 +1328,8 @@ UI.CheckboxLabel = class extends HTMLLabelElement {
    */
   static create(title, checked, subtitle) {
     if (!UI.CheckboxLabel._constructor)
-      UI.CheckboxLabel._constructor = UI.registerCustomElement('label', 'dt-checkbox', UI.CheckboxLabel.prototype);
-    const element = /** @type {!UI.CheckboxLabel} */ (new UI.CheckboxLabel._constructor());
+      UI.CheckboxLabel._constructor = UI.registerCustomElement('span', 'dt-checkbox', UI.CheckboxLabel);
+    const element = /** @type {!UI.CheckboxLabel} */ (UI.CheckboxLabel._constructor());
     element.checkboxElement.checked = !!checked;
     if (title !== undefined) {
       element.textElement.textContent = title;
@@ -1350,158 +1370,140 @@ UI.CheckboxLabel = class extends HTMLLabelElement {
 };
 
 (function() {
-  UI.registerCustomElement('button', 'text-button', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      this.type = 'button';
-      const root = UI.createShadowRootWithCoreStyles(this, 'ui/textButton.css');
-      root.createChild('content');
-    },
+let labelId = 0;
+UI.registerCustomElement('span', 'dt-radio', class extends HTMLSpanElement {
+  constructor() {
+    super();
+    this.radioElement = this.createChild('input', 'dt-radio-button');
+    this.labelElement = this.createChild('label');
 
-    __proto__: HTMLButtonElement.prototype
-  });
+    const id = 'dt-radio-button-id' + (++labelId);
+    this.radioElement.id = id;
+    this.radioElement.type = 'radio';
+    this.labelElement.htmlFor = id;
+    const root = UI.createShadowRootWithCoreStyles(this, 'ui/radioButton.css');
+    root.createChild('slot');
+    this.addEventListener('click', radioClickHandler, false);
+  }
+});
 
-  UI.registerCustomElement('label', 'dt-radio', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      this.radioElement = this.createChild('input', 'dt-radio-button');
-      this.radioElement.type = 'radio';
-      const root = UI.createShadowRootWithCoreStyles(this, 'ui/radioButton.css');
-      root.createChild('content').select = '.dt-radio-button';
-      root.createChild('content');
-      this.addEventListener('click', radioClickHandler, false);
-    },
-
-    __proto__: HTMLLabelElement.prototype
-  });
-
-  /**
+/**
    * @param {!Event} event
    * @suppressReceiverCheck
    * @this {Element}
    */
-  function radioClickHandler(event) {
-    if (this.radioElement.checked || this.radioElement.disabled)
-      return;
-    this.radioElement.checked = true;
-    this.radioElement.dispatchEvent(new Event('change'));
+function radioClickHandler(event) {
+  if (this.radioElement.checked || this.radioElement.disabled)
+    return;
+  this.radioElement.checked = true;
+  this.radioElement.dispatchEvent(new Event('change'));
+}
+
+UI.registerCustomElement('span', 'dt-icon-label', class extends HTMLSpanElement {
+  constructor() {
+    super();
+    const root = UI.createShadowRootWithCoreStyles(this);
+    this._iconElement = UI.Icon.create();
+    this._iconElement.style.setProperty('margin-right', '4px');
+    root.appendChild(this._iconElement);
+    root.createChild('slot');
   }
 
-  UI.registerCustomElement('label', 'dt-icon-label', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      const root = UI.createShadowRootWithCoreStyles(this);
-      this._iconElement = UI.Icon.create();
-      this._iconElement.style.setProperty('margin-right', '4px');
-      root.appendChild(this._iconElement);
-      root.createChild('content');
-    },
-
-    /**
+  /**
      * @param {string} type
      * @this {Element}
      */
-    set type(type) {
-      this._iconElement.setIconType(type);
-    },
+  set type(type) {
+    this._iconElement.setIconType(type);
+  }
+});
 
-    __proto__: HTMLLabelElement.prototype
-  });
+UI.registerCustomElement('span', 'dt-slider', class extends HTMLSpanElement {
+  constructor() {
+    super();
+    const root = UI.createShadowRootWithCoreStyles(this, 'ui/slider.css');
+    this.sliderElement = createElementWithClass('input', 'dt-range-input');
+    this.sliderElement.type = 'range';
+    root.appendChild(this.sliderElement);
+  }
 
-  UI.registerCustomElement('label', 'dt-slider', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      const root = UI.createShadowRootWithCoreStyles(this, 'ui/slider.css');
-      this.sliderElement = createElementWithClass('input', 'dt-range-input');
-      this.sliderElement.type = 'range';
-      root.appendChild(this.sliderElement);
-    },
-
-    /**
+  /**
      * @param {number} amount
      * @this {Element}
      */
-    set value(amount) {
-      this.sliderElement.value = amount;
-    },
+  set value(amount) {
+    this.sliderElement.value = amount;
+  }
 
-    /**
+  /**
      * @this {Element}
      */
-    get value() {
-      return this.sliderElement.value;
-    },
+  get value() {
+    return this.sliderElement.value;
+  }
+});
 
-    __proto__: HTMLLabelElement.prototype
-  });
+UI.registerCustomElement('span', 'dt-small-bubble', class extends HTMLSpanElement {
+  constructor() {
+    super();
+    const root = UI.createShadowRootWithCoreStyles(this, 'ui/smallBubble.css');
+    this._textElement = root.createChild('div');
+    this._textElement.className = 'info';
+    this._textElement.createChild('slot');
+  }
 
-  UI.registerCustomElement('label', 'dt-small-bubble', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      const root = UI.createShadowRootWithCoreStyles(this, 'ui/smallBubble.css');
-      this._textElement = root.createChild('div');
-      this._textElement.className = 'info';
-      this._textElement.createChild('content');
-    },
-
-    /**
+  /**
      * @param {string} type
      * @this {Element}
      */
-    set type(type) {
-      this._textElement.className = type;
-    },
+  set type(type) {
+    this._textElement.className = type;
+  }
+});
 
-    __proto__: HTMLLabelElement.prototype
-  });
+UI.registerCustomElement('div', 'dt-close-button', class extends HTMLDivElement {
+  constructor() {
+    super();
+    const root = UI.createShadowRootWithCoreStyles(this, 'ui/closeButton.css');
+    this._buttonElement = root.createChild('div', 'close-button');
+    UI.ARIAUtils.setAccessibleName(this._buttonElement, ls`Close`);
+    UI.ARIAUtils.markAsButton(this._buttonElement);
+    const regularIcon = UI.Icon.create('smallicon-cross', 'default-icon');
+    this._hoverIcon = UI.Icon.create('mediumicon-red-cross-hover', 'hover-icon');
+    this._activeIcon = UI.Icon.create('mediumicon-red-cross-active', 'active-icon');
+    this._buttonElement.appendChild(regularIcon);
+    this._buttonElement.appendChild(this._hoverIcon);
+    this._buttonElement.appendChild(this._activeIcon);
+  }
 
-  UI.registerCustomElement('div', 'dt-close-button', {
-    /**
-     * @this {Element}
-     */
-    createdCallback: function() {
-      const root = UI.createShadowRootWithCoreStyles(this, 'ui/closeButton.css');
-      this._buttonElement = root.createChild('div', 'close-button');
-      const regularIcon = UI.Icon.create('smallicon-cross', 'default-icon');
-      this._hoverIcon = UI.Icon.create('mediumicon-red-cross-hover', 'hover-icon');
-      this._activeIcon = UI.Icon.create('mediumicon-red-cross-active', 'active-icon');
-      this._buttonElement.appendChild(regularIcon);
-      this._buttonElement.appendChild(this._hoverIcon);
-      this._buttonElement.appendChild(this._activeIcon);
-    },
-
-    /**
+  /**
      * @param {boolean} gray
      * @this {Element}
      */
-    set gray(gray) {
-      if (gray) {
-        this._hoverIcon.setIconType('mediumicon-gray-cross-hover');
-        this._activeIcon.setIconType('mediumicon-gray-cross-active');
-      } else {
-        this._hoverIcon.setIconType('mediumicon-red-cross-hover');
-        this._activeIcon.setIconType('mediumicon-red-cross-active');
-      }
-    },
+  set gray(gray) {
+    if (gray) {
+      this._hoverIcon.setIconType('mediumicon-gray-cross-hover');
+      this._activeIcon.setIconType('mediumicon-gray-cross-active');
+    } else {
+      this._hoverIcon.setIconType('mediumicon-red-cross-hover');
+      this._activeIcon.setIconType('mediumicon-red-cross-active');
+    }
+  }
 
-    __proto__: HTMLDivElement.prototype
-  });
+  /**
+   * @param {string} name
+   * @this {Element}
+   */
+  setAccessibleName(name) {
+    UI.ARIAUtils.setAccessibleName(this._buttonElement, name);
+  }
+});
 })();
 
 /**
  * @param {!Element} input
  * @param {function(string)} apply
- * @param {function(string):boolean} validate
+ * @param {function(string):{valid: boolean, errorMessage: (string|undefined)}} validate
  * @param {boolean} numeric
  * @param {number=} modifierMultiplier
  * @return {function(string)}
@@ -1517,7 +1519,7 @@ UI.bindInput = function(input, apply, validate, numeric, modifierMultiplier) {
   }
 
   function onChange() {
-    const valid = validate(input.value);
+    const {valid} = validate(input.value);
     input.classList.toggle('error-input', !valid);
     if (valid)
       apply(input.value);
@@ -1528,7 +1530,8 @@ UI.bindInput = function(input, apply, validate, numeric, modifierMultiplier) {
    */
   function onKeyDown(event) {
     if (isEnterKey(event)) {
-      if (validate(input.value))
+      const {valid} = validate(input.value);
+      if (valid)
         apply(input.value);
       event.preventDefault();
       return;
@@ -1539,7 +1542,8 @@ UI.bindInput = function(input, apply, validate, numeric, modifierMultiplier) {
 
     const value = UI._modifiedFloatNumber(parseFloat(input.value), event, modifierMultiplier);
     const stringValue = value ? String(value) : '';
-    if (!validate(stringValue) || !value)
+    const {valid} = validate(stringValue);
+    if (!valid || !value)
       return;
 
     input.value = stringValue;
@@ -1553,7 +1557,7 @@ UI.bindInput = function(input, apply, validate, numeric, modifierMultiplier) {
   function setValue(value) {
     if (value === input.value)
       return;
-    const valid = validate(value);
+    const {valid} = validate(value);
     input.classList.toggle('error-input', !valid);
     input.value = value;
   }
@@ -1654,7 +1658,8 @@ UI.ThemeSupport = class {
    * @param {!Common.Setting} setting
    */
   constructor(setting) {
-    this._themeName = setting.get() || 'default';
+    const systemPreferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+    this._themeName = setting.get() === 'systemPreferred' ? systemPreferredTheme : setting.get();
     this._themableProperties = new Set([
       'color', 'box-shadow', 'text-shadow', 'outline-color', 'background-image', 'background-color',
       'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color', '-webkit-border-image',
@@ -1681,7 +1686,7 @@ UI.ThemeSupport = class {
   }
 
   /**
-   * @param {!Element} element
+   * @param {!Element|!ShadowRoot} element
    */
   injectHighlightStyleSheets(element) {
     this._injectingStyleSheet = true;
@@ -2007,7 +2012,7 @@ UI.ConfirmDialog = class {
 };
 
 /**
- * @param {!UI.ToolbarToggle} toolbarButton
+ * @param {!UI.ToolbarButton} toolbarButton
  * @return {!Element}
  */
 UI.createInlineButton = function(toolbarButton) {
@@ -2026,6 +2031,11 @@ UI.createInlineButton = function(toolbarButton) {
  * @return {!DocumentFragment}
  */
 UI.createExpandableText = function(text, maxLength) {
+  const clickHandler = () => {
+    if (expandElement.parentElement)
+      expandElement.parentElement.insertBefore(createTextNode(text.slice(maxLength)), expandElement);
+    expandElement.remove();
+  };
   const fragment = createDocumentFragment();
   fragment.textContent = text.slice(0, maxLength);
   const expandElement = fragment.createChild('span');
@@ -2033,11 +2043,13 @@ UI.createExpandableText = function(text, maxLength) {
   if (text.length < 10000000) {
     expandElement.setAttribute('data-text', ls`Show more (${totalBytes})`);
     expandElement.classList.add('expandable-inline-button');
-    expandElement.addEventListener('click', () => {
-      if (expandElement.parentElement)
-        expandElement.parentElement.insertBefore(createTextNode(text.slice(maxLength)), expandElement);
-      expandElement.remove();
+    expandElement.addEventListener('click', clickHandler);
+    expandElement.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ')
+        clickHandler();
     });
+    UI.ARIAUtils.markAsButton(expandElement);
+
   } else {
     expandElement.setAttribute('data-text', ls`long text was truncated (${totalBytes})`);
     expandElement.classList.add('undisplayable-text');
@@ -2048,6 +2060,11 @@ UI.createExpandableText = function(text, maxLength) {
   copyButton.addEventListener('click', () => {
     InspectorFrontendHost.copyText(text);
   });
+  copyButton.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ')
+      InspectorFrontendHost.copyText(text);
+  });
+  UI.ARIAUtils.markAsButton(copyButton);
   return fragment;
 };
 
@@ -2079,3 +2096,27 @@ UI.Renderer.render = async function(object, options) {
 
 /** @typedef {!{title: (string|!Element|undefined), editable: (boolean|undefined) }} */
 UI.Renderer.Options;
+
+/**
+ * @param {number} timestamp
+ * @param {boolean} full
+ * @return {string}
+ */
+UI.formatTimestamp = function(timestamp, full) {
+  const date = new Date(timestamp);
+  const yymmdd = date.getFullYear() + '-' + leadZero(date.getMonth() + 1, 2) + '-' + leadZero(date.getDate(), 2);
+  const hhmmssfff = leadZero(date.getHours(), 2) + ':' + leadZero(date.getMinutes(), 2) + ':' +
+      leadZero(date.getSeconds(), 2) + '.' + leadZero(date.getMilliseconds(), 3);
+  return full ? (yymmdd + ' ' + hhmmssfff) : hhmmssfff;
+
+  /**
+   * @param {number} value
+   * @param {number} length
+   * @return {string}
+   */
+  function leadZero(value, length) {
+    const valueString = value.toString();
+    const padding = length - valueString.length;
+    return padding <= 0 ? valueString : '0'.repeat(padding) + valueString;
+  }
+};

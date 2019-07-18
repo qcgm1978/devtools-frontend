@@ -9,10 +9,6 @@
     display: block;
 }
 
-.sensors-view label {
-    margin-bottom: 10px;
-}
-
 .sensors-view input {
     width: 100%;
     max-width: 100px;
@@ -34,10 +30,6 @@
 
 .sensors-view fieldset[disabled] {
     opacity: 0.5;
-}
-
-.sensors-view .field-error-message {
-    display: none;
 }
 
 .sensors-view input:focus::-webkit-input-placeholder {
@@ -291,14 +283,6 @@ fieldset.device-orientation-override-section {
     display: flex;
 }
 
-.touch-label {
-    margin-top: 10px;
-}
-
-.touch-label select {
-    margin-left: 10px;
-}
-
 .panel-section-separator {
     height: 2px;
     margin-bottom: 8px;
@@ -310,6 +294,6 @@ fieldset.device-orientation-override-section {
     margin-left: 10px;
 }
 
-button[is=text-button] {
+button.text-button {
     margin: 0 10px;
 }

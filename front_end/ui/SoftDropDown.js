@@ -15,11 +15,13 @@ UI.SoftDropDown = class {
     this._selectedItem = null;
     this._model = model;
 
+    this._placeholderText = ls`(no item selected)`;
+
     this.element = createElementWithClass('button', 'soft-dropdown');
-    const shadowRoot = UI.createShadowRootWithCoreStyles(this.element, 'ui/softDropDownButton.css');
-    this._titleElement = shadowRoot.createChild('span', 'title');
+    UI.appendStyle(this.element, 'ui/softDropDownButton.css');
+    this._titleElement = this.element.createChild('span', 'title');
     const dropdownArrowIcon = UI.Icon.create('smallicon-triangle-down');
-    shadowRoot.appendChild(dropdownArrowIcon);
+    this.element.appendChild(dropdownArrowIcon);
 
     this._glassPane = new UI.GlassPane();
     this._glassPane.setMarginBehavior(UI.GlassPane.MarginBehavior.NoMargin);
@@ -183,6 +185,15 @@ UI.SoftDropDown = class {
   }
 
   /**
+   * @param {string} text
+   */
+  setPlaceholderText(text) {
+    this._placeholderText = text;
+    if (!this._selectedItem)
+      this._titleElement.textContent = this._placeholderText;
+  }
+
+  /**
    * @param {!Common.Event} event
    */
   _itemsReplaced(event) {
@@ -202,7 +213,7 @@ UI.SoftDropDown = class {
     if (this._selectedItem)
       this._titleElement.textContent = this._delegate.titleFor(this._selectedItem);
     else
-      this._titleElement.textContent = '';
+      this._titleElement.textContent = this._placeholderText;
     this._delegate.itemSelected(this._selectedItem);
   }
 

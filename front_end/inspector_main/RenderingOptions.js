@@ -38,6 +38,10 @@ InspectorMain.RenderingOptionsView = class extends UI.VBox {
         Common.UIString('Highlights areas of the page (green) that need to be repainted'),
         Common.moduleSetting('showPaintRects'));
     this._appendCheckbox(
+        Common.UIString('Layout Shift Regions'),
+        Common.UIString('Highlights areas of the page (blue) that were shifted'),
+        Common.moduleSetting('showLayoutShiftRegions'));
+    this._appendCheckbox(
         Common.UIString('Layer borders'), Common.UIString('Shows layer borders (orange/olive) and tiles (cyan)'),
         Common.moduleSetting('showDebugBorders'));
     this._appendCheckbox(
@@ -49,6 +53,9 @@ InspectorMain.RenderingOptionsView = class extends UI.VBox {
         Common.UIString(
             'Highlights elements (teal) that can slow down scrolling, including touch & wheel event handlers and other main-thread scrolling situations.'),
         Common.moduleSetting('showScrollBottleneckRects'));
+    this._appendCheckbox(
+        Common.UIString('Highlight ad frames'), Common.UIString('Highlights frames (red) detected to be ads.'),
+        Common.moduleSetting('showAdHighlights'));
     this._appendCheckbox(
         Common.UIString('Hit-test borders'), Common.UIString('Shows borders around hit-test regions'),
         Common.moduleSetting('showHitTestBorders'));
